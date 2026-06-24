@@ -46,7 +46,7 @@ _Expanded query (B/E):_ `handle peak load. Related concepts: traffic spikes, aut
 |------|----------|--------|-------|-------|
 | 1 | `doc-01::chunk-0` | `doc-01` | -5.9117 | Autoscaling and traffic spikes |
 | 2 | `doc-03::chunk-1` | `doc-03` | -8.3573 | Caching strategy |
-| 3 | `doc-01::chunk-1` | `doc-01` | -10.0668 | Autoscaling and traffic spikes |
+| 3 | `doc-01::chunk-1` | `doc-01` | -10.0669 | Autoscaling and traffic spikes |
 
 **E — Expand + Rerank**
 
@@ -54,7 +54,7 @@ _Expanded query (B/E):_ `handle peak load. Related concepts: traffic spikes, aut
 |------|----------|--------|-------|-------|
 | 1 | `doc-01::chunk-0` | `doc-01` | -5.9117 | Autoscaling and traffic spikes |
 | 2 | `doc-03::chunk-1` | `doc-03` | -8.3573 | Caching strategy |
-| 3 | `doc-01::chunk-1` | `doc-01` | -10.0668 | Autoscaling and traffic spikes |
+| 3 | `doc-01::chunk-1` | `doc-01` | -10.0669 | Autoscaling and traffic spikes |
 
 ### Query 2: What happens when the embedding service is slow or fails?
 
@@ -150,11 +150,11 @@ Each query was warmed once then timed 10 times across 3 queries (n=30 samples pe
 
 | Strategy | p50 | p95 | mean |
 |----------|-----|-----|------|
-| A_raw_vector_search | 5.26 | 7.24 | 5.44 |
-| B_ai_enhanced_retrieval | 4.71 | 7.47 | 5.29 |
-| C_hybrid_dense_plus_bm25 | 4.36 | 5.21 | 4.49 |
-| D_rerank | 18.08 | 71.35 | 23.29 |
-| E_expand_plus_rerank | 17.73 | 19.93 | 17.99 |
+| A_raw_vector_search | 11.05 | 12.01 | 11.05 |
+| B_ai_enhanced_retrieval | 9.76 | 11.30 | 9.88 |
+| C_hybrid_dense_plus_bm25 | 10.41 | 11.06 | 10.44 |
+| D_rerank | 48.59 | 60.87 | 48.48 |
+| E_expand_plus_rerank | 48.36 | 64.09 | 48.97 |
 
 ## 3. Quality vs labelled set (with 95% bootstrap CIs)
 
@@ -204,8 +204,8 @@ RRF score = `w_dense / (60 + rank_dense) + w_bm25 / (60 + rank_bm25)`. Sweeping 
 - **No strategy reaches paired-bootstrap significance over A** at p<0.05 (n=16). The point estimates that match A are genuinely indistinguishable on this labelled set, not just noisily close — see the CI on the per-query difference.
 - **A significantly *beats*** **C_hybrid_dense_plus_bm25** — i.e. these strategies actively regress on MRR with p>0.95. On this corpus they should not be enabled.
 - **Weight sweep on C settles the hybrid question.** Best weight: `(w_dense=1.0, w_bm25=0.0)` → MRR 0.927. As `w_bm25` increases from 0, MRR drops monotonically. BM25 carries no signal the dense encoder is missing on this corpus — the paraphrased queries don't share tokens with the passages, and the lexical queries already match through the encoder. Conclusion: do not enable hybrid here. Keep the BM25 index for the breaker-open fallback (see `doc-07`) and for a future corpus with named entities or jargon.
-- **Latency.** Median per call — A_raw_vector_search: 5.26 ms, B_ai_enhanced_retrieval: 4.71 ms, C_hybrid_dense_plus_bm25: 4.36 ms, D_rerank: 18.08 ms, E_expand_plus_rerank: 17.73 ms. The cross-encoder pass in D/E dominates (18.1 ms on CPU over ~20 candidates) — on GPU+ONNX this same step is typically ~5 ms, so the absolute cost is a CPU artefact, not a fundamental cost.
+- **Latency.** Median per call — A_raw_vector_search: 11.05 ms, B_ai_enhanced_retrieval: 9.76 ms, C_hybrid_dense_plus_bm25: 10.41 ms, D_rerank: 48.59 ms, E_expand_plus_rerank: 48.36 ms. The cross-encoder pass in D/E dominates (48.6 ms on CPU over ~20 candidates) — on GPU+ONNX this same step is typically ~5 ms, so the absolute cost is a CPU artefact, not a fundamental cost.
 - **Caching is doing real work.** Hit ratios reported in §6 — the same query and chunk show up many times during qualitative, eval and weight-sweep phases, so the cache turns the second and subsequent visits into a dict lookup. Note: §2 latency is measured on a *separate* uncached pipeline, so the per-call numbers reflect raw cost, not cache-hit cost.
-- **Production recommendation, data-driven.** On *this* corpus, ship **A_raw_vector_search** — it ties the headline metric (MRR=0.927) at the lowest latency (5.26 ms). Keep B/D/E built and tested: query expansion earns its keep when user vocabulary diverges from corpus vocabulary, and reranking earns its keep when the encoder is weaker or the corpus larger. Re-run this benchmark on the real corpus before defaulting to a more expensive strategy — the labelled set + paired bootstrap is the regression gate that decides.
+- **Production recommendation, data-driven.** On *this* corpus, ship **A_raw_vector_search** — it ties the headline metric (MRR=0.927) at the lowest latency (11.05 ms). Keep B/D/E built and tested: query expansion earns its keep when user vocabulary diverges from corpus vocabulary, and reranking earns its keep when the encoder is weaker or the corpus larger. Re-run this benchmark on the real corpus before defaulting to a more expensive strategy — the labelled set + paired bootstrap is the regression gate that decides.
 - **What this benchmark *cannot* tell us.** With 16 labelled queries the bootstrap CI on MRR is wide ([0.81, 1.00] for A). A production labelled set should have ≥100 queries spanning intent classes (navigational, informational, transactional) so the paired test has the power to detect a 2-3 point lift. The eval *framework* is the deliverable here, not the specific numbers — the framework will scale to that larger set without changes.
 
